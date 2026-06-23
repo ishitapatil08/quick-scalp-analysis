@@ -76,7 +76,7 @@ function fileToBase64(file: File): Promise<string> {
         }
         
         // Compress to JPEG format with 80% quality to drastically reduce size
-        const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
+        const dataUrl = canvas.toDataURL("image/png", 0.8);
         resolve(dataUrl.split(",")[1]);
       };
       img.onerror = () => reject(new Error("Failed to load image"));
