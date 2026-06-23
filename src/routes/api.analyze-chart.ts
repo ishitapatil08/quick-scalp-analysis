@@ -1,4 +1,5 @@
-import type { Express, Request, Response } from "express";
+import { json } from "@tanstack/react-start";
+import { createAPIFileRoute } from "@tanstack/react-start/api";
 
 const SYSTEM_PROMPT = `You are ScalpEngine AI, an ultra-fast execution analyst built for high-frequency intraday traders and scalpers. Your sole objective is to dissect a chart screenshot and instantly extract micro-structural zones, momentum triggers, and clear risk/reward setups.
 
@@ -44,13 +45,13 @@ CRITICAL: Return ONLY a valid JSON object. No markdown. No explanation. No backt
   }
 }`;
 
-export function registerAnalyzeChart(app: Express) {
-  app.post("/api/analyze-chart", async (req: Request, res: Response) => {
+export const APIRoute = createAPIFileRoute("/api/analyze-chart")({
+  POST: async ({ request }) => {
     try {
-      const { imageBase64, mimeType } = req.body;
+      const { imageBase64, mimeType } = await request.json();
 
       if (!imageBase64 || !mimeType) {
-        return res.status(400).json({ error: "Missing imageBase64 or mimeType" });
+        return json({ error: "Missing imageBase64 or mimeType" }, { status: 400 });
       }
 
       const response = await fetch("https://api.anthropic.com/v1/messages", {
@@ -89,19 +90,22 @@ export function registerAnalyzeChart(app: Express) {
       if (!response.ok) {
         const error = await response.json();
         console.error("Anthropic API error:", error);
-        return res.status(500).json({ error: "AI analysis failed." });
+        return json({ error: "AI analysis failed." }, { status: 500 });
       }
 
       const data = await response.json();
       let rawText = data.content[0].text.trim();
-      rawText = rawText.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
+      rawText = rawText
+        .replace(/^```json\n?/, "")
+        .replace(/\n?```$/, "")
+        .trim();
 
       const analysis = JSON.parse(rawText);
-      return res.json(analysis);
+      return json(analysis);
 
     } catch (err) {
       console.error("ScalpEngine error:", err);
-      return res.status(500).json({ error: "Something went wrong. Try again." });
+      return json({ error: "Something went wrong." }, { status: 500 });
     }
-  });
-}
+  },
+});
