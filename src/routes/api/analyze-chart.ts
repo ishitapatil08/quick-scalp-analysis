@@ -1,47 +1,32 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-const SYSTEM_PROMPT = `You are ScalpEngine AI, an ultra-fast execution analyst built for high-frequency intraday traders and scalpers. Your sole objective is to dissect a chart screenshot and instantly extract micro-structural zones, momentum triggers, and clear risk/reward setups.
+const SYSTEM_PROMPT = `You are ScalpEngine AI, an ultra-fast execution analyst for intraday traders and scalpers.
 
-Analyze these intraday parameters:
-1. Immediate Trend: Strong Bullish, Strong Bearish, or Range-Bound
-2. Candle Dynamics: marubozu, long-wick rejections, engulfing patterns
-3. RSI / Momentum: overbought/oversold, mid-line rejections, divergences
-4. Intraday Support & Resistance: horizontal shelves, swing highs/lows
-5. Liquidity Formations: equal highs/lows, genuine breakout vs fakeout/sweep
-6. Fibonacci: 0.5-0.618 golden pocket on recent micro-leg
-7. Volatility: 9/20 EMA extension or compression
+STEP 1 — VALIDATE THE IMAGE.
+Before any analysis, decide if the screenshot is a real financial trading chart (candlestick / OHLC / line chart from TradingView, MT4/5, broker terminal, exchange app, etc. showing a stock, index, forex, crypto, futures or commodity with price axis and time axis).
 
-CRITICAL: Return ONLY a valid JSON object. No markdown. No explanation. No backticks. Just raw JSON exactly matching this structure:
+If the image is NOT a trading chart (e.g. random photo, meme, document, UI screenshot, blank image, drawing, unrelated content), respond with EXACTLY this JSON and nothing else:
+{"valid": false, "reason": "<one short sentence telling the user what you actually see and that they must upload a stock/forex/crypto chart screenshot>"}
 
+STEP 2 — If it IS a valid trading chart, analyze:
+1. Immediate Trend, 2. Candle Dynamics, 3. RSI/Momentum, 4. Intraday S/R,
+5. Liquidity (equal highs/lows, sweeps), 6. Fibonacci 0.5-0.618, 7. EMA extension.
+
+Return ONLY this JSON, no markdown, no backticks:
 {
-  "asset": "detected asset name or Unknown",
+  "valid": true,
+  "asset": "detected ticker/asset or Unknown",
   "timeframe": "detected timeframe or Unknown",
   "currentPrice": "last visible price",
-  "marketState": "one of: Aggressive Bullish Breakout / Strong Bullish Trend / Bullish Consolidation / Range-Bound Chop / Bearish Consolidation / Strong Bearish Trend / Aggressive Bearish Breakdown / Volatility Spike",
-  "resistance": ["level1", "level2"],
-  "support": ["level1", "level2"],
-  "liquidityTarget": "describe where stops are resting",
-  "momentum": "RSI state and implication in one sentence",
-  "meanReversion": "EMA distance and snapback risk in one sentence",
-  "fibPivot": "key fib or pivot level observation in one sentence",
-  "setup1": {
-    "type": "Trend Continuation",
-    "direction": "Long or Short",
-    "logic": "one sentence setup rationale",
-    "trigger": "exact candle or price trigger",
-    "stopLoss": "exact level",
-    "takeProfit": "exact level",
-    "rr": "1:X.X"
-  },
-  "setup2": {
-    "type": "Mean Reversion",
-    "direction": "Long or Short",
-    "logic": "one sentence setup rationale",
-    "trigger": "exact candle or price trigger",
-    "stopLoss": "exact level",
-    "takeProfit": "exact level",
-    "rr": "1:X.X"
-  }
+  "marketState": "Aggressive Bullish Breakout | Strong Bullish Trend | Bullish Consolidation | Range-Bound Chop | Bearish Consolidation | Strong Bearish Trend | Aggressive Bearish Breakdown | Volatility Spike",
+  "resistance": ["level1","level2"],
+  "support": ["level1","level2"],
+  "liquidityTarget": "where stops are resting",
+  "momentum": "RSI state + implication, one sentence",
+  "meanReversion": "EMA distance + snapback risk, one sentence",
+  "fibPivot": "key fib/pivot observation, one sentence",
+  "setup1": {"type":"Trend Continuation","direction":"Long|Short","logic":"...","trigger":"...","stopLoss":"...","takeProfit":"...","rr":"1:X.X"},
+  "setup2": {"type":"Mean Reversion","direction":"Long|Short","logic":"...","trigger":"...","stopLoss":"...","takeProfit":"...","rr":"1:X.X"}
 }`;
 
 export const Route = createFileRoute("/api/analyze-chart")({
@@ -53,48 +38,34 @@ export const Route = createFileRoute("/api/analyze-chart")({
             imageBase64?: string;
             mimeType?: string;
           };
-
           if (!imageBase64 || !mimeType) {
-            return Response.json(
-              { error: "Missing imageBase64 or mimeType" },
-              { status: 400 },
-            );
+            return Response.json({ error: "Missing image data." }, { status: 400 });
           }
 
-          const apiKey = process.env.ANTHROPIC_API_KEY;
+          const apiKey = process.env.LOVABLE_API_KEY;
           if (!apiKey) {
-            return Response.json(
-              { error: "ANTHROPIC_API_KEY is not configured." },
-              { status: 500 },
-            );
+            return Response.json({ error: "AI gateway not configured." }, { status: 500 });
           }
 
-          const response = await fetch("https://api.anthropic.com/v1/messages", {
+          const dataUrl = `data:${mimeType};base64,${imageBase64}`;
+
+          const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "x-api-key": apiKey,
-              "anthropic-version": "2023-06-01",
+              "Lovable-API-Key": apiKey,
             },
             body: JSON.stringify({
-              model: "claude-sonnet-4-5",
-              max_tokens: 1500,
-              system: SYSTEM_PROMPT,
+              model: "google/gemini-2.5-flash",
               messages: [
+                { role: "system", content: SYSTEM_PROMPT },
                 {
                   role: "user",
                   content: [
-                    {
-                      type: "image",
-                      source: {
-                        type: "base64",
-                        media_type: mimeType,
-                        data: imageBase64,
-                      },
-                    },
+                    { type: "image_url", image_url: { url: dataUrl } },
                     {
                       type: "text",
-                      text: "Analyze this chart. Return ONLY the JSON object. No markdown, no backticks, no explanation.",
+                      text: "Validate this image first. If it is a stock/forex/crypto trading chart, analyze it and return the full JSON. If it is NOT a trading chart, return the {valid:false,reason} JSON. Return ONLY raw JSON.",
                     },
                   ],
                 },
@@ -102,21 +73,50 @@ export const Route = createFileRoute("/api/analyze-chart")({
             }),
           });
 
-          if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            console.error("Anthropic API error:", error);
+          if (!aiRes.ok) {
+            const errBody = await aiRes.text().catch(() => "");
+            console.error("AI gateway error", aiRes.status, errBody);
+            if (aiRes.status === 429) {
+              return Response.json({ error: "Rate limit reached. Please wait a moment and retry." }, { status: 429 });
+            }
+            if (aiRes.status === 402) {
+              return Response.json({ error: "AI credits exhausted. Add credits in workspace billing." }, { status: 402 });
+            }
             return Response.json({ error: "AI analysis failed." }, { status: 500 });
           }
 
-          const data = (await response.json()) as { content: Array<{ text: string }> };
-          let rawText = data.content[0].text.trim();
-          rawText = rawText
-            .replace(/^```json\n?/, "")
-            .replace(/\n?```$/, "")
-            .trim();
+          const data = (await aiRes.json()) as {
+            choices: Array<{ message: { content: string } }>;
+          };
+          let raw = data.choices?.[0]?.message?.content?.trim() ?? "";
+          raw = raw.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```$/i, "").trim();
 
-          const analysis = JSON.parse(rawText);
-          return Response.json(analysis);
+          let parsed: { valid?: boolean; reason?: string; [k: string]: unknown };
+          try {
+            parsed = JSON.parse(raw);
+          } catch {
+            const m = raw.match(/\{[\s\S]*\}/);
+            if (!m) {
+              return Response.json(
+                { error: "AI response was not valid JSON. Try a clearer chart screenshot." },
+                { status: 502 },
+              );
+            }
+            parsed = JSON.parse(m[0]);
+          }
+
+          if (parsed.valid === false) {
+            return Response.json(
+              {
+                error:
+                  parsed.reason ||
+                  "This doesn't look like a trading chart. Please upload a stock, forex, or crypto chart screenshot.",
+              },
+              { status: 422 },
+            );
+          }
+
+          return Response.json(parsed);
         } catch (err) {
           console.error("ScalpEngine error:", err);
           return Response.json({ error: "Something went wrong." }, { status: 500 });

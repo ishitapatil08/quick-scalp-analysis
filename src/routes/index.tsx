@@ -117,9 +117,15 @@ function Index() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ imageBase64, mimeType: file.type }),
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as Analysis;
-      setAnalysis(data);
+      const payload = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const msg =
+          (payload && typeof payload.error === "string" && payload.error) ||
+          `Analysis failed (HTTP ${res.status}).`;
+        toast.error(msg, { duration: 6000 });
+        return;
+      }
+      setAnalysis(payload as Analysis);
       toast.success("Analysis complete ✓");
       // smooth scroll after render
       setTimeout(() => {
@@ -127,7 +133,7 @@ function Index() {
       }, 60);
     } catch (err) {
       console.error(err);
-      toast.error("Analysis failed. Try again.");
+      toast.error("Network error. Please try again.");
     } finally {
       setLoading(false);
     }
