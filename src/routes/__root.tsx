@@ -81,11 +81,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "ScalpEngine AI — Institutional-grade scalp analysis" },
       { name: "description", content: "Upload a chart screenshot and get instant scalp analysis: levels, confluence, and trade setups." },
       { name: "author", content: "ScalpEngine AI" },
-      { property: "og:title", content: "ScalpEngine AI" },
-      { property: "og:description", content: "Institutional-grade scalp analysis in seconds." },
+      { property: "og:title", content: "ScalpEngine AI — Institutional-grade scalp analysis" },
+      { property: "og:description", content: "Upload a chart screenshot and get instant scalp analysis: levels, confluence, and trade setups." },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
+      { name: "twitter:title", content: "ScalpEngine AI — Institutional-grade scalp analysis" },
+      { name: "twitter:description", content: "Upload a chart screenshot and get instant scalp analysis: levels, confluence, and trade setups." },
+      { property: "og:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/d63dfdeb-d4a2-42d4-9bb5-3db4accfb4eb" },
+      { name: "twitter:image", content: "https://storage.googleapis.com/gpt-engineer-file-uploads/attachments/og-images/d63dfdeb-d4a2-42d4-9bb5-3db4accfb4eb" },
     ],
     links: [
       {
