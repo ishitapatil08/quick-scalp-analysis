@@ -47,7 +47,7 @@ export const Route = createFileRoute("/api/analyze-chart")({
             return Response.json({ error: "GEMINI_API_KEY is not configured in Vercel." }, { status: 500 });
           }
 
-          const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+          const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
