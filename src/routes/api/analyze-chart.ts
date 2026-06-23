@@ -1,9 +1,6 @@
-export default async function handler(req, res) {
-  if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
-  }
+import { createFileRoute } from "@tanstack/react-router";
 
-  const SYSTEM_PROMPT = `You are ScalpEngine AI, an ultra-fast execution analyst built for high-frequency intraday traders and scalpers. Your sole objective is to dissect a chart screenshot and instantly extract micro-structural zones, momentum triggers, and clear risk/reward setups.
+const SYSTEM_PROMPT = `You are ScalpEngine AI, an ultra-fast execution analyst built for high-frequency intraday traders and scalpers. Your sole objective is to dissect a chart screenshot and instantly extract micro-structural zones, momentum triggers, and clear risk/reward setups.
 
 Analyze these intraday parameters:
 1. Immediate Trend: Strong Bullish, Strong Bearish, or Range-Bound
@@ -47,64 +44,84 @@ CRITICAL: Return ONLY a valid JSON object. No markdown. No explanation. No backt
   }
 }`;
 
-  try {
-    const { imageBase64, mimeType } = req.body;
+export const Route = createFileRoute("/api/analyze-chart")({
+  server: {
+    handlers: {
+      POST: async ({ request }) => {
+        try {
+          const { imageBase64, mimeType } = (await request.json()) as {
+            imageBase64?: string;
+            mimeType?: string;
+          };
 
-    if (!imageBase64 || !mimeType) {
-      return res.status(400).json({ error: "Missing imageBase64 or mimeType" });
-    }
+          if (!imageBase64 || !mimeType) {
+            return Response.json(
+              { error: "Missing imageBase64 or mimeType" },
+              { status: 400 },
+            );
+          }
 
-    const response = await fetch("https://api.anthropic.com/v1/messages", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-api-key": process.env.ANTHROPIC_API_KEY || "",
-        "anthropic-version": "2023-06-01",
-      },
-      body: JSON.stringify({
-        model: "claude-sonnet-4-6",
-        max_tokens: 1500,
-        system: SYSTEM_PROMPT,
-        messages: [
-          {
-            role: "user",
-            content: [
-              {
-                type: "image",
-                source: {
-                  type: "base64",
-                  media_type: mimeType,
-                  data: imageBase64,
+          const apiKey = process.env.ANTHROPIC_API_KEY;
+          if (!apiKey) {
+            return Response.json(
+              { error: "ANTHROPIC_API_KEY is not configured." },
+              { status: 500 },
+            );
+          }
+
+          const response = await fetch("https://api.anthropic.com/v1/messages", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-api-key": apiKey,
+              "anthropic-version": "2023-06-01",
+            },
+            body: JSON.stringify({
+              model: "claude-sonnet-4-5",
+              max_tokens: 1500,
+              system: SYSTEM_PROMPT,
+              messages: [
+                {
+                  role: "user",
+                  content: [
+                    {
+                      type: "image",
+                      source: {
+                        type: "base64",
+                        media_type: mimeType,
+                        data: imageBase64,
+                      },
+                    },
+                    {
+                      type: "text",
+                      text: "Analyze this chart. Return ONLY the JSON object. No markdown, no backticks, no explanation.",
+                    },
+                  ],
                 },
-              },
-              {
-                type: "text",
-                text: "Analyze this chart. Return ONLY the JSON object. No markdown, no backticks, no explanation.",
-              },
-            ],
-          },
-        ],
-      }),
-    });
+              ],
+            }),
+          });
 
-    if (!response.ok) {
-      const error = await response.json();
-      console.error("Anthropic API error:", error);
-      return res.status(500).json({ error: "AI analysis failed." });
-    }
+          if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            console.error("Anthropic API error:", error);
+            return Response.json({ error: "AI analysis failed." }, { status: 500 });
+          }
 
-    const data = await response.json();
-    let rawText = data.content[0].text.trim();
-    rawText = rawText
-      .replace(/^```json\n?/, "")
-      .replace(/\n?```$/, "")
-      .trim();
+          const data = (await response.json()) as { content: Array<{ text: string }> };
+          let rawText = data.content[0].text.trim();
+          rawText = rawText
+            .replace(/^```json\n?/, "")
+            .replace(/\n?```$/, "")
+            .trim();
 
-    const analysis = JSON.parse(rawText);
-    return res.status(200).json(analysis);
-
-  } catch (err) {
-    console.error("ScalpEngine error:", err);
-    return res.status(500).json({ error: "Something went wrong." });
-  }
-}
+          const analysis = JSON.parse(rawText);
+          return Response.json(analysis);
+        } catch (err) {
+          console.error("ScalpEngine error:", err);
+          return Response.json({ error: "Something went wrong." }, { status: 500 });
+        }
+      },
+    },
+  },
+});
