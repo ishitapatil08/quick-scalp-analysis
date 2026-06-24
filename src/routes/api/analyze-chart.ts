@@ -42,50 +42,54 @@ export const Route = createFileRoute("/api/analyze-chart")({
             return Response.json({ error: "Missing image data." }, { status: 400 });
           }
 
-          const apiKey = process.env.GEMINI_API_KEY;
+          const apiKey = process.env.LOVABLE_API_KEY;
           if (!apiKey) {
-            return Response.json({ error: "GEMINI_API_KEY is not configured in Vercel." }, { status: 500 });
+            return Response.json({ error: "LOVABLE_API_KEY is not configured." }, { status: 500 });
           }
 
-          const aiRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`, {
+          const dataUrl = `data:${mimeType};base64,${imageBase64}`;
+
+          const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
+              "Lovable-API-Key": apiKey,
             },
             body: JSON.stringify({
-              systemInstruction: {
-                parts: [{ text: SYSTEM_PROMPT }]
-              },
-              contents: [
+              model: "google/gemini-2.5-pro",
+              messages: [
+                { role: "system", content: SYSTEM_PROMPT },
                 {
                   role: "user",
-                  parts: [
+                  content: [
+                    { type: "image_url", image_url: { url: dataUrl } },
                     {
-                      inlineData: {
-                        mimeType: mimeType,
-                        data: imageBase64
-                      }
+                      type: "text",
+                      text: "Validate this image first. If it is a stock/forex/crypto trading chart, analyze it and return the full JSON. If it is NOT a trading chart, return the {valid:false,reason} JSON. Return ONLY raw JSON, no markdown.",
                     },
-                    {
-                      text: "Validate this image first. If it is a stock/forex/crypto trading chart, analyze it and return the full JSON. If it is NOT a trading chart, return the {valid:false,reason} JSON. Return ONLY raw JSON."
-                    }
-                  ]
-                }
+                  ],
+                },
               ],
-              generationConfig: {
-                responseMimeType: "application/json"
-              }
+              response_format: { type: "json_object" },
             }),
           });
 
           if (!aiRes.ok) {
             const errBody = await aiRes.text().catch(() => "");
-            console.error("Gemini API error:", aiRes.status, errBody);
-            return Response.json({ error: `Gemini API failed with status ${aiRes.status}` }, { status: 500 });
+            console.error("Lovable AI error:", aiRes.status, errBody);
+            if (aiRes.status === 429) {
+              return Response.json({ error: "Rate limit hit. Please wait and try again." }, { status: 429 });
+            }
+            if (aiRes.status === 402) {
+              return Response.json({ error: "AI credits exhausted. Please add credits in Lovable workspace settings." }, { status: 402 });
+            }
+            return Response.json({ error: `AI gateway failed (${aiRes.status}).` }, { status: 500 });
           }
 
           const data = await aiRes.json();
-          let raw = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() ?? "";
+          let raw = (data.choices?.[0]?.message?.content ?? "").trim();
+          // strip ```json fences if present
+          raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
           
           let parsed;
           try {
