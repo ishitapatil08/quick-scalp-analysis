@@ -55,7 +55,6 @@ export const Route = createFileRoute("/api/analyze-chart")({
             return Response.json({ error: "Missing image data." }, { status: 400 });
           }
 
-          const apiKey = process.env.LOVABLE_API_KEY;
           const anthropicKey = process.env.ANTHROPIC_API_KEY;
           if (!anthropicKey) {
             return Response.json({ error: "ANTHROPIC_API_KEY is not configured." }, { status: 500 });
