@@ -55,28 +55,30 @@ export const Route = createFileRoute("/api/analyze-chart")({
             return Response.json({ error: "Missing image data." }, { status: 400 });
           }
 
-          const apiKey = process.env.LOVABLE_API_KEY;
-          if (!apiKey) {
-            return Response.json({ error: "LOVABLE_API_KEY is not configured." }, { status: 500 });
+          const anthropicKey = process.env.ANTHROPIC_API_KEY;
+          if (!anthropicKey) {
+            return Response.json({ error: "ANTHROPIC_API_KEY is not configured." }, { status: 500 });
           }
 
-          const dataUrl = `data:${mimeType};base64,${imageBase64}`;
-
-          const aiRes = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+          const aiRes = await fetch("https://api.anthropic.com/v1/messages", {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              "Lovable-API-Key": apiKey,
-              "X-Lovable-AIG-SDK": "raw-fetch",
+              "x-api-key": anthropicKey,
+              "anthropic-version": "2023-06-01",
             },
             body: JSON.stringify({
-              model: "google/gemini-2.5-pro",
+              model: "claude-3-5-sonnet-20241022",
+              max_tokens: 2048,
+              system: SYSTEM_PROMPT,
               messages: [
-                { role: "system", content: SYSTEM_PROMPT },
                 {
                   role: "user",
                   content: [
-                    { type: "image_url", image_url: { url: dataUrl } },
+                    {
+                      type: "image",
+                      source: { type: "base64", media_type: mimeType, data: imageBase64 },
+                    },
                     {
                       type: "text",
                       text: "Validate this image first. If it is a stock/forex/crypto trading chart, analyze it and return the full JSON. If it is NOT a trading chart, return the {valid:false,reason} JSON. Return ONLY raw JSON, no markdown.",
@@ -90,18 +92,18 @@ export const Route = createFileRoute("/api/analyze-chart")({
           if (!aiRes.ok) {
             const errBody = await aiRes.text().catch(() => "");
             const gatewayMessage = extractGatewayError(errBody);
-            console.error("Lovable AI error:", aiRes.status, gatewayMessage);
+            console.error("Anthropic API error:", aiRes.status, gatewayMessage);
             if (aiRes.status === 429) {
               return Response.json({ error: "Rate limit hit. Please wait and try again." }, { status: 429 });
             }
-            if (aiRes.status === 402) {
-              return Response.json({ error: "AI credits exhausted. Please add credits in Lovable workspace settings." }, { status: 402 });
+            if (aiRes.status === 401) {
+              return Response.json({ error: "Invalid ANTHROPIC_API_KEY." }, { status: 401 });
             }
-            return Response.json({ error: `AI gateway failed (${aiRes.status}): ${gatewayMessage}` }, { status: aiRes.status });
+            return Response.json({ error: `Claude API failed (${aiRes.status}): ${gatewayMessage}` }, { status: aiRes.status });
           }
 
           const data = await aiRes.json();
-          let raw = (data.choices?.[0]?.message?.content ?? "").trim();
+          let raw = (data.content?.[0]?.text ?? "").trim();
           // strip ```json fences if present
           raw = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/i, "").trim();
           
