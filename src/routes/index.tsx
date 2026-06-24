@@ -40,7 +40,7 @@ type Analysis = {
   setup2: Setup;
 };
 
-function fileToBase64(file: File): Promise<string> {
+function fileToAnalysisImage(file: File): Promise<{ imageBase64: string; mimeType: string }> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -75,9 +75,9 @@ function fileToBase64(file: File): Promise<string> {
           ctx.drawImage(img, 0, 0, width, height);
         }
         
-        // Compress to JPEG format with 80% quality to drastically reduce size
-        const dataUrl = canvas.toDataURL("image/png", 0.8);
-        resolve(dataUrl.split(",")[1]);
+        // Normalize every upload to JPEG so the server receives a matching MIME/data pair.
+        const dataUrl = canvas.toDataURL("image/jpeg", 0.82);
+        resolve({ imageBase64: dataUrl.split(",")[1], mimeType: "image/jpeg" });
       };
       img.onerror = () => reject(new Error("Failed to load image"));
       img.src = reader.result as string;
@@ -144,11 +144,11 @@ function Index() {
     if (!file) return;
     setLoading(true);
     try {
-      const imageBase64 = await fileToBase64(file);
+      const { imageBase64, mimeType } = await fileToAnalysisImage(file);
       const res = await fetch("/api/analyze-chart", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ imageBase64, mimeType: file.type }),
+        body: JSON.stringify({ imageBase64, mimeType }),
       });
       const payload = await res.json().catch(() => ({}));
       if (!res.ok) {

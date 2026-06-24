@@ -29,6 +29,19 @@ Return ONLY this JSON, no markdown, no backticks:
   "setup2": {"type":"Mean Reversion","direction":"Long|Short","logic":"...","trigger":"...","stopLoss":"...","takeProfit":"...","rr":"1:X.X"}
 }`;
 
+function extractGatewayError(body: string) {
+  if (!body) return "AI gateway failed.";
+  try {
+    const parsed = JSON.parse(body) as { error?: { message?: string } | string; message?: string };
+    if (typeof parsed.error === "string") return parsed.error;
+    if (typeof parsed.error?.message === "string") return parsed.error.message;
+    if (typeof parsed.message === "string") return parsed.message;
+  } catch {
+    // fall through to trimmed text
+  }
+  return body.slice(0, 220);
+}
+
 export const Route = createFileRoute("/api/analyze-chart")({
   server: {
     handlers: {
@@ -54,6 +67,7 @@ export const Route = createFileRoute("/api/analyze-chart")({
             headers: {
               "Content-Type": "application/json",
               "Lovable-API-Key": apiKey,
+              "X-Lovable-AIG-SDK": "raw-fetch",
             },
             body: JSON.stringify({
               model: "google/gemini-2.5-pro",
@@ -70,20 +84,20 @@ export const Route = createFileRoute("/api/analyze-chart")({
                   ],
                 },
               ],
-              response_format: { type: "json_object" },
             }),
           });
 
           if (!aiRes.ok) {
             const errBody = await aiRes.text().catch(() => "");
-            console.error("Lovable AI error:", aiRes.status, errBody);
+            const gatewayMessage = extractGatewayError(errBody);
+            console.error("Lovable AI error:", aiRes.status, gatewayMessage);
             if (aiRes.status === 429) {
               return Response.json({ error: "Rate limit hit. Please wait and try again." }, { status: 429 });
             }
             if (aiRes.status === 402) {
               return Response.json({ error: "AI credits exhausted. Please add credits in Lovable workspace settings." }, { status: 402 });
             }
-            return Response.json({ error: `AI gateway failed (${aiRes.status}).` }, { status: 500 });
+            return Response.json({ error: `AI gateway failed (${aiRes.status}): ${gatewayMessage}` }, { status: aiRes.status });
           }
 
           const data = await aiRes.json();
